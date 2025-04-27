@@ -1,0 +1,585 @@
+---
+title: "PERMA+4 Longitudinal"
+output: html_document
+date: "2025-03-09"
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r Packages}
+#Packages
+library(tidyverse)
+library(VIM)        
+library(mice)   
+library(dplyr)  
+library(ggplot2)    
+library(readxl)
+library(lavaan)  
+library(semPlot) 
+library(psych)
+
+
+```
+```{r Import data}
+PERMA4_Longitudinal_FINAL <- read_excel("PERMA4_Longitudinal_FINAL.xlsx")
+PERMA4_Longitudinal_FINAL <- as.data.frame(PERMA4_Longitudinal_FINAL)
+```
+
+#Descriptives for Well-Being Measures
+```{r WB-Means and sds}
+# List of variables
+vars <- c(
+  "PERMA4_Score_I_T1", "PERMA4_Score_T2",
+  "JAWS_PositiveEmotion_Score_T1", "JAWS_PositiveEmotion_Score_T2",
+  "JAWS_NegativeEmotion_Score_T1", "JAWS_NegativeEmotion_Score_T2",
+  "JobStress_Score_T1", "JobStress_Score_T2",
+  "Turnover_Score_T1", "Turnover_Score_T2"
+)
+
+# Calculate Means and SDs
+means_sds <- PERMA4_Longitudinal %>%
+  select(all_of(vars)) %>%
+  psych::describe() %>%
+  select(mean, sd) %>%
+  round(2)
+
+# View results
+print(means_sds)
+```
+```{r WB-Cronbach alpha}
+#T1 PERMA4
+# Vector of PERMA+4 T1 items
+perma4_t1_items <- c(
+"PositiveEmotions_I_T1", 
+"Engagement_I_T1", 
+"Relationships_I_T1",
+"Meaning_I_T1", 
+"Accomplishment_I_T1", 
+"Health_I_T1",
+"Mindset_I_T1", 
+"Environment_I_T1", 
+"EconomicSecurity_I_T1"
+)
+
+# Calculate Cronbach's alpha for PERMA+4 T1
+alpha(PERMA4_Longitudinal[, perma4_t1_items])
+
+#T2 PERMA4
+# Vector of PERMA+4 T2 items
+perma4_t2_items <- c(
+"Positiveemotion_I_T2", 
+"Engagment_I_T2", 
+"Relationships_1_T2",
+"Meaning_I_T2", 
+"Accomplishment_1_T2", 
+"Health_I_T2",
+"Mindset_I_T2", 
+"Environment_I_T2", 
+"Income_I_T2"
+)
+
+# Calculate Cronbach's alpha for PERMA+4 T2
+alpha(PERMA4_Longitudinal[, perma4_t2_items])
+
+#T1 JAWS Positive
+# Get JAWS Positive Affect items from T1 (items that contain 'HP' and '_T1')
+jaws_positive_t1_items <- grep("J_.*HP.*_T1", names(PERMA4_Longitudinal), value = TRUE)
+
+# Compute Cronbach's alpha
+alpha(PERMA4_Longitudinal[, jaws_positive_t1_items])
+
+# T2 JAWS Positive
+# Get JAWS Positive Affect items from T2 (items that contain 'HP' and '_T2')
+jaws_positive_t2_items <- grep("J_.*HP.*_T2", names(PERMA4_Longitudinal), value = TRUE)
+
+# Compute Cronbach's alpha
+alpha(PERMA4_Longitudinal[, jaws_positive_t2_items])
+
+# T1 JAWS Negative
+# Get JAWS Negative Affect items from T1 (items that start with 'J_' but do NOT contain 'HP')
+jaws_negative_t1_items <- grep("J_(?!.*HP).*_T1", names(PERMA4_Longitudinal), value = TRUE, perl = TRUE)
+
+# Compute Cronbach's alpha
+alpha(PERMA4_Longitudinal[, jaws_negative_t1_items])
+
+# T2 JAWS Negative
+# Get JAWS Negative Affect items from T2 (items that start with 'J_' but do NOT contain 'HP')
+jaws_negative_t2_items <- grep("J_(?!.*HP).*_T2", names(PERMA4_Longitudinal), value = TRUE, perl = TRUE)
+
+# Compute Cronbach's alpha
+alpha(PERMA4_Longitudinal[, jaws_negative_t2_items])
+
+# T1 Job Stress items (using the reverse-scored item)
+job_stress_t1_items <- c("JS_1_T1", "JS_2_T1", "JS_3_T1", "JS_4_Final_T1", "JS_5_T1")
+
+# Compute Cronbach's alpha
+alpha(PERMA4_Longitudinal[, job_stress_t1_items])
+
+# T2 Job Stress items (including reverse-scored item)
+job_stress_t2_items <- c("JS_1_T2", "JS_2_T2", "JS_3_T2", "JS_4_T2_RevScore", "JS_5_T2")
+
+# Compute Cronbach's alpha
+alpha(PERMA4_Longitudinal[, job_stress_t2_items])
+
+# T1 Turnover items with reverse-coded item included
+turnover_t1_items <- c("Turnover_1_T1", "Turnover_2_T1", "Turnover_3_T1", "Turnover_4_Final_T1", "Turnover_5_T1")
+
+# Compute Cronbach's alpha
+alpha(PERMA4_Longitudinal[, turnover_t1_items])
+
+# Reverse Turnover_5_T1 and create a new column
+PERMA4_Longitudinal$Turnover_5_Final_T1 <- 6 - PERMA4_Longitudinal$Turnover_5_T1
+
+# Define corrected Turnover T1 items
+turnover_t1_items_clean <- c("Turnover_1_T1", "Turnover_2_T1", "Turnover_3_T1", "Turnover_4_Final_T1", "Turnover_5_Final_T1")
+
+# Compute Cronbach's alpha
+alpha(PERMA4_Longitudinal[, turnover_t1_items_clean])
+
+# Manually reverse Turnover_5_T2 (assuming it uses a 1–5 Likert scale)
+PERMA4_Longitudinal$Turnover_5_T2_Rev <- 6 - PERMA4_Longitudinal$Turnover_5_T2
+
+# Now recompute the alpha with the corrected items
+turnover_t2_corrected_items <- c("Turnover_1_T2", "Turnover_2_T2", "Turnover_3_T2", 
+                                 "Turnover_4_T2_RevScored", "Turnover_5_T2_Rev")
+
+# Compute Cronbach's alpha
+psych::alpha(PERMA4_Longitudinal[, turnover_t2_corrected_items])
+```
+```{r WB-Correlations}
+# Define variables for Table 1 (positive/negative affect, stress, turnover)
+table1_vars <- c(
+  "PERMA4_Score_I_T1", "PERMA4_Score_T2",
+  "JAWS_PositiveEmotion_Score_T1", "JAWS_PositiveEmotion_Score_T2",
+  "JAWS_NegativeEmotion_Score_T1", "JAWS_NegativeEmotion_Score_T2",
+  "JobStress_Score_T1", "JobStress_Score_T2",
+  "Turnover_Score_T1", "Turnover_Score_T2"
+)
+
+# Compute correlation matrix with p-values
+cor_results <- corr.test(PERMA4_Longitudinal[, table1_vars], use = "pairwise", adjust = "none")
+
+# Extract and round r matrix
+cor_matrix <- round(cor_results$r, 2)
+
+# Optional: significance stars
+p_matrix <- cor_results$p
+star_matrix <- ifelse(p_matrix < .001, "***",
+                ifelse(p_matrix < .01, "**",
+                ifelse(p_matrix < .05, "*", "")))
+
+# Combine r values with stars
+r_star_matrix <- matrix(paste0(format(cor_matrix, nsmall = 2), star_matrix),
+                        nrow = nrow(cor_matrix), dimnames = dimnames(cor_matrix))
+
+# Optional: blank upper triangle and diagonal
+r_star_matrix[upper.tri(r_star_matrix, diag = TRUE)] <- ""
+
+# View formatted matrix
+r_star_matrix
+```
+```{r WB-Pvalues}
+# Define your variables
+variables <- c(
+  "PERMA4_Score_I_T1", "PERMA4_Score_T2",
+  "JAWS_PositiveEmotion_Score_T1", "JAWS_PositiveEmotion_Score_T2",
+  "JAWS_NegativeEmotion_Score_T1", "JAWS_NegativeEmotion_Score_T2",
+  "JobStress_Score_T1", "JobStress_Score_T2",
+  "Turnover_Score_T1", "Turnover_Score_T2"
+)
+
+# Subset data
+data_subset <- PERMA4_Longitudinal[, variables]
+
+# Compute correlation matrix with significance test
+cor_results <- corr.test(data_subset, use = "pairwise", method = "pearson", adjust = "none")
+
+# Correlation coefficients
+cor_matrix <- round(cor_results$r, 2)
+
+# p-values matrix
+p_matrix <- cor_results$p
+
+# Create significance mask (TRUE where p < .05)
+sig_mask <- p_matrix < 0.05
+
+# Optionally: Mark significant correlations with *
+cor_matrix_with_sig <- cor_matrix
+cor_matrix_with_sig[sig_mask] <- paste0(cor_matrix[sig_mask], "*")
+cor_matrix_with_sig[!sig_mask] <- as.character(cor_matrix[!sig_mask])
+
+# Print table (lower triangle only)
+print("Lower triangle with significance markers:")
+for (i in 2:ncol(cor_matrix_with_sig)) {
+  row_vals <- sapply(1:(i-1), function(j) cor_matrix_with_sig[i, j])
+  cat(sprintf("%s: %s\n", variables[i], paste(row_vals, collapse = ", ")))
+}
+```
+
+#Descriptives for Work Role Performance
+```{r WRP-Means and sds}
+# Define the individual-level work role performance variables
+individual_vars_ordered <- c(
+  "Proficiency_I_Score_T1", "Individual_Proficiency_Score_T2",
+  "Adapt_I_Score_T1", "Individual_Adaptivity_Score_T2",
+  "Proact_I_Score_T1", "Individual_Proactivity_Score_T2"
+)
+
+# Compute Means and SDs
+summary_stats_individual <- data.frame(
+  Variable = individual_vars,
+  Mean = sapply(PERMA4_Longitudinal[, individual_vars], mean, na.rm = TRUE),
+  SD = sapply(PERMA4_Longitudinal[, individual_vars], sd, na.rm = TRUE)
+)
+
+# Round to 2 decimals
+summary_stats_individual$Mean <- round(summary_stats_individual$Mean, 2)
+summary_stats_individual$SD <- round(summary_stats_individual$SD, 2)
+
+# Display the table
+summary_stats_individual
+```
+```{r WRP-Cronbach alpha}
+# Define item sets for each subscale
+proficiency_t1_items <- c("WP_I_Prof_1_T1", "WP_I_Prof_2_T1", "WP_I_Prof_3_T1")
+proficiency_t2_items <- c("WP_I_Prof_1_T2", "WP_I_Prof_2_T2", "WP_I_Prof_3_T2")
+
+adaptivity_t1_items <- c("WP_I_Adapt_1_T1", "WP_I_Adapt_2_T1", "WP_I_Adapt_3_T1")
+adaptivity_t2_items <- c("WP_I_Adapt_1_T2", "WP_I_Adapt_2_T2", "WP_I_Adapt_3_T2")
+
+proactivity_t1_items <- c("WP_I_Proact_1_T1", "WP_I_Proact_2_T1", "WP_I_Proact_3_T1")
+proactivity_t2_items <- c("WP_I_Proact_1_T2", "WP_I_Proact_2_T2", "WP_I_Proact_3_T2")
+
+# Compute alphas
+alpha(PERMA4_Longitudinal[, proficiency_t1_items])  # Individual Proficiency T1
+alpha(PERMA4_Longitudinal[, proficiency_t2_items])  # Individual Proficiency T2
+
+alpha(PERMA4_Longitudinal[, adaptivity_t1_items])   # Individual Adaptivity T1
+alpha(PERMA4_Longitudinal[, adaptivity_t2_items])   # Individual Adaptivity T2
+
+alpha(PERMA4_Longitudinal[, proactivity_t1_items])  # Individual Proactivity T1
+alpha(PERMA4_Longitudinal[, proactivity_t2_items])  # Individual Proactivity T2
+```
+```{r WRP-Correlations}
+# Define the ordered variable list
+table2_vars <- c(
+  "PERMA4_Score_I_T1", "PERMA4_Score_T2",
+  "Proficiency_I_Score_T1", "Individual_Proficiency_Score_T2",
+  "Adapt_I_Score_T1", "Individual_Adaptivity_Score_T2",
+  "Proact_I_Score_T1", "Individual_Proactivity_Score_T2"
+)
+
+# Compute the correlation matrix with p-values
+cor_results <- corr.test(PERMA4_Longitudinal[, table2_vars], use = "pairwise")
+
+# Extract r and p matrices
+r_matrix <- round(cor_results$r, 2)
+p_matrix <- cor_results$p
+
+# Apply significance stars
+star_matrix <- ifelse(p_matrix < .001, "***",
+                ifelse(p_matrix < .01, "**",
+                ifelse(p_matrix < .05, "*", "")))
+
+# Combine r and stars
+r_star_matrix <- matrix(paste0(format(r_matrix, nsmall = 2), star_matrix),
+                        nrow = nrow(r_matrix), dimnames = dimnames(r_matrix))
+
+# Blank out upper triangle and diagonal
+r_star_matrix[upper.tri(r_star_matrix, diag = TRUE)] <- ""
+
+# View the formatted matrix
+r_star_matrix
+```
+
+#Cross-lagged panel models - well-being
+```{r JAWS positive}
+# Simpler CLPM: PERMA+4 total score → JAWS positive affect
+clpm_observed_model <- '
+  # Autoregressive effects (stability)
+  PERMA4_Score_T2 ~ a1 * PERMA4_Score_I_T1
+  JAWS_PositiveEmotion_Score_T2 ~ a2 * JAWS_PositiveEmotion_Score_T1
+
+  # Cross-lagged effect: Does PERMA+4 T1 predict JAWS T2?
+  JAWS_PositiveEmotion_Score_T2 ~ b1 * PERMA4_Score_I_T1
+
+  # Optional reverse effect
+  PERMA4_Score_T2 ~ b2 * JAWS_PositiveEmotion_Score_T1
+
+  # Correlated residuals at each time point
+  PERMA4_Score_I_T1 ~~ JAWS_PositiveEmotion_Score_T1
+  PERMA4_Score_T2 ~~ JAWS_PositiveEmotion_Score_T2
+'
+
+# Fit the model
+clpm_observed_fit <- 
+lavaan::sem(clpm_observed_model, 
+data = PERMA4_Longitudinal_FINAL, 
+estimator = "ML")
+
+# Summarize results
+summary(clpm_observed_fit, 
+        fit.measures = TRUE, 
+        standardized = TRUE)
+
+# Get parameter estimates including standardized solution and CIs
+params <- parameterEstimates(clpm_observed_fit, standardized = TRUE, ci = TRUE)
+
+# Filter for the cross-lagged path: PERMA+4 T1 → JAWS positive T2
+params[params$lhs == "JAWS_PositiveEmotion_Score_T2" &
+       params$op == "~" &
+       params$rhs == "PERMA4_Score_I_T1", ]
+
+#R2
+inspect(clpm_observed_fit, "r2")
+
+```
+```{r JAWS negative}
+# Cross-lagged panel model: PERMA+4 → JAWS Negative Emotion
+clpm_neg_jaws_model <- '
+  # Autoregressive (stability) paths
+  PERMA4_Score_T2 ~ a1 * PERMA4_Score_I_T1
+  JAWS_NegativeEmotion_Score_T2 ~ a2 * JAWS_NegativeEmotion_Score_T1
+
+  # Cross-lagged effect: Does PERMA+4 T1 predict change in JAWS negative emotion T2?
+  JAWS_NegativeEmotion_Score_T2 ~ b1 * PERMA4_Score_I_T1
+
+  # Optional reverse effect
+  PERMA4_Score_T2 ~ b2 * JAWS_NegativeEmotion_Score_T1
+
+  # Correlated residuals
+  PERMA4_Score_I_T1 ~~ JAWS_NegativeEmotion_Score_T1
+  PERMA4_Score_T2 ~~ JAWS_NegativeEmotion_Score_T2
+'
+
+# Fit the model
+clpm_neg_jaws_fit <- lavaan::sem(clpm_neg_jaws_model, 
+                                 data = PERMA4_Longitudinal_FINAL, 
+                                 estimator = "ML")
+
+# Get parameter estimates including standardized solution and 95% CIs
+params_neg <- parameterEstimates(clpm_neg_jaws_fit, standardized = TRUE, ci = TRUE)
+
+# Filter for the cross-lagged path: PERMA+4 T1 → JAWS Negative Emotion T2
+params_neg[params_neg$lhs == "JAWS_NegativeEmotion_Score_T2" &
+           params_neg$op == "~" &
+           params_neg$rhs == "PERMA4_Score_I_T1", ]
+
+# Get R-squared values for T2 outcomes
+inspect(clpm_neg_jaws_fit, "r2")
+```
+```{r Job stress}
+# Cross-lagged panel model: PERMA+4 → Job Stress
+clpm_stress_model <- '
+  # Autoregressive (stability) paths
+  PERMA4_Score_T2 ~ a1 * PERMA4_Score_I_T1
+  JobStress_Score_T2 ~ a2 * JobStress_Score_T1
+
+  # Cross-lagged effect: Does PERMA+4 T1 predict job stress T2?
+  JobStress_Score_T2 ~ b1 * PERMA4_Score_I_T1
+
+  # Optional reverse effect
+  PERMA4_Score_T2 ~ b2 * JobStress_Score_T1
+
+  # Correlated residuals
+  PERMA4_Score_I_T1 ~~ JobStress_Score_T1
+  PERMA4_Score_T2 ~~ JobStress_Score_T2
+'
+
+# Fit the model
+clpm_stress_fit <- lavaan::sem(clpm_stress_model, data = PERMA4_Longitudinal_FINAL, estimator = "ML")
+
+# Summarize the results
+summary(clpm_stress_fit, fit.measures = TRUE, standardized = TRUE)
+
+# Get parameter estimates with standardized solution and 95% CIs
+params_stress <- parameterEstimates(clpm_stress_fit, standardized = TRUE, ci = TRUE)
+
+# Filter for the cross-lagged path: PERMA+4 T1 → Job Stress T2
+params_stress[params_stress$lhs == "JobStress_Score_T2" &
+              params_stress$op == "~" &
+              params_stress$rhs == "PERMA4_Score_I_T1", ]
+
+# Get R-squared values for T2 outcomes
+inspect(clpm_stress_fit, "r2")
+```
+```{r Turnover intentions}
+# Cross-lagged panel model: PERMA+4 → Turnover Intentions
+clpm_turnover_model <- '
+  # Autoregressive (stability) paths
+  PERMA4_Score_T2 ~ a1 * PERMA4_Score_I_T1
+  Turnover_Score_T2 ~ a2 * Turnover_Score_T1
+
+  # Cross-lagged effect: Does PERMA+4 T1 predict turnover T2?
+  Turnover_Score_T2 ~ b1 * PERMA4_Score_I_T1
+
+  # Optional reverse effect
+  PERMA4_Score_T2 ~ b2 * Turnover_Score_T1
+
+  # Correlated residuals
+  PERMA4_Score_I_T1 ~~ Turnover_Score_T1
+  PERMA4_Score_T2 ~~ Turnover_Score_T2
+'
+
+# Fit the model
+clpm_turnover_fit <- lavaan::sem(clpm_turnover_model, 
+                                 data = PERMA4_Longitudinal_FINAL, 
+                                 estimator = "ML")
+
+# Get parameter estimates with standardized solution and 95% CIs
+params_turnover <- parameterEstimates(clpm_turnover_fit, 
+                                      standardized = TRUE, 
+                                      ci = TRUE)
+
+# Filter for the cross-lagged path: PERMA+4 T1 → Turnover Intentions T2
+params_turnover[params_turnover$lhs == "Turnover_Score_T2" &
+                params_turnover$op == "~" &
+                params_turnover$rhs == "PERMA4_Score_I_T1", ]
+
+# Get R-squared values for T2 outcomes
+inspect(clpm_turnover_fit, "r2")
+
+```
+
+#Cross-lagged panel models - well-being
+```{r Individual proficiency}
+# Cross-lagged panel model: PERMA+4 → Individual Proficiency
+clpm_proficiency_model <- '
+  # Autoregressive (stability) paths
+  PERMA4_Score_T2 ~ a1 * PERMA4_Score_I_T1
+  Individual_Proficiency_Score_T2 ~ a2 * Proficiency_I_Score_T1
+
+  # Cross-lagged effect: PERMA+4 ➝ Proficiency
+  Individual_Proficiency_Score_T2 ~ b1 * PERMA4_Score_I_T1
+
+  # Optional reverse effect
+  PERMA4_Score_T2 ~ b2 * Proficiency_I_Score_T1
+
+  # Correlated residuals
+  PERMA4_Score_I_T1 ~~ Proficiency_I_Score_T1
+  PERMA4_Score_T2 ~~ Individual_Proficiency_Score_T2
+'
+
+# Fit the model
+clpm_proficiency_fit <- lavaan::sem(clpm_proficiency_model, 
+                                    data = PERMA4_Longitudinal_FINAL, 
+                                    estimator = "ML")
+
+# Get parameter estimates with standardized solution and 95% CIs
+params_proficiency <- parameterEstimates(clpm_proficiency_fit, 
+                                         standardized = TRUE, 
+                                         ci = TRUE)
+
+# Filter for the cross-lagged path: PERMA+4 T1 → Individual Proficiency T2
+params_proficiency[params_proficiency$lhs == "Individual_Proficiency_Score_T2" &
+                   params_proficiency$op == "~" &
+                   params_proficiency$rhs == "PERMA4_Score_I_T1", ]
+
+# Get R-squared values for T2 outcomes
+inspect(clpm_proficiency_fit, "r2")
+```
+```{r Individual adaptivity}
+# Cross-lagged panel model: PERMA+4 → Individual Adaptivity
+clpm_individual_adaptivity_model <- '
+  # Autoregressive (stability) paths
+  PERMA4_Score_T2 ~ a1 * PERMA4_Score_I_T1
+  Individual_Adaptivity_Score_T2 ~ a2 * Adapt_I_Score_T1
+
+  # Cross-lagged effect: PERMA+4 ➝ Adaptivity
+  Individual_Adaptivity_Score_T2 ~ b1 * PERMA4_Score_I_T1
+
+  # Optional reverse effect: Adaptivity ➝ PERMA+4
+  PERMA4_Score_T2 ~ b2 * Adapt_I_Score_T1
+
+  # Correlated residuals
+  PERMA4_Score_I_T1 ~~ Adapt_I_Score_T1
+  PERMA4_Score_T2 ~~ Individual_Adaptivity_Score_T2
+'
+
+# Fit the model
+clpm_individual_adaptivity_fit <- lavaan::sem(
+  clpm_individual_adaptivity_model,
+  data = PERMA4_Longitudinal_FINAL,
+  estimator = "ML"
+)
+
+# Get parameter estimates with standardized solution and 95% CIs
+params_adaptivity <- parameterEstimates(
+  clpm_individual_adaptivity_fit,
+  standardized = TRUE,
+  ci = TRUE
+)
+
+# Filter for the cross-lagged path: PERMA+4 T1 → Individual Adaptivity T2
+params_adaptivity[params_adaptivity$lhs == "Individual_Adaptivity_Score_T2" &
+                  params_adaptivity$op == "~" &
+                  params_adaptivity$rhs == "PERMA4_Score_I_T1", ]
+
+# Get R-squared values for T2 outcomes
+inspect(clpm_individual_adaptivity_fit, "r2")
+```
+```{r Individual proactivity}
+# Cross-lagged panel model: PERMA+4 → Individual Proactivity
+clpm_individual_proactivity_model <- '
+  # Autoregressive (stability) paths
+  PERMA4_Score_T2 ~ a1 * PERMA4_Score_I_T1
+  Individual_Proactivity_Score_T2 ~ a2 * Proact_I_Score_T1
+
+  # Cross-lagged effect: PERMA+4 ➝ Proactivity
+  Individual_Proactivity_Score_T2 ~ b1 * PERMA4_Score_I_T1
+
+  # Optional reverse effect: Proactivity ➝ PERMA+4
+  PERMA4_Score_T2 ~ b2 * Proact_I_Score_T1
+
+  # Correlated residuals
+  PERMA4_Score_I_T1 ~~ Proact_I_Score_T1
+  PERMA4_Score_T2 ~~ Individual_Proactivity_Score_T2
+'
+
+# Fit the model
+clpm_individual_proactivity_fit <- lavaan::sem(
+  clpm_individual_proactivity_model,
+  data = PERMA4_Longitudinal_FINAL,
+  estimator = "ML"
+)
+
+# Get parameter estimates with standardized solution and 95% CIs
+params_proactivity <- parameterEstimates(
+  clpm_individual_proactivity_fit,
+  standardized = TRUE,
+  ci = TRUE
+)
+
+# Filter for the cross-lagged path: PERMA+4 T1 → Individual Proactivity T2
+params_proactivity[params_proactivity$lhs == "Individual_Proactivity_Score_T2" &
+                   params_proactivity$op == "~" &
+                   params_proactivity$rhs == "PERMA4_Score_I_T1", ]
+
+# Get R-squared values for T2 outcomes
+inspect(clpm_individual_proactivity_fit, "r2")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
